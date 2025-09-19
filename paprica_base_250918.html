@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PAPRICAN!🌶️</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/d3-geo-projection.v4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/topojson@3.0.2/dist/topojson.min.js"></script>
+    <script src="https://d3js.org/d3-scale-chromatic.v2.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f0f0;
+            color: #333333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .map-container {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        #map-svg {
+            background-color: #ffffff;
+            border-radius: 0.75rem;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            max-width: 200px;
+            line-height: 1.4;
+        }
+
+        .country {
+            stroke: #4a5568;
+            stroke-width: 1px;
+            transition: fill 0.2s, stroke 0.2s;
+            cursor: pointer;
+        }
+
+        .country:hover {
+            fill: #a0aec0;
+            stroke: #cbd5e0;
+        }
+
+        .title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1a202c;
+        }
+
+        #details-container {
+            width: 100%;
+            min-height: 150px;
+            background-color: #f0f0f0;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: left;
+            font-style: italic;
+            color: #a0aec0;
+            transition: background-color 0.3s;
+        }
+
+        .details-content {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #333333;
+            font-style: normal;
+            text-align: left;
+        }
+
+        .details-title {
+            font-weight: bold;
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            width: 100%;
+            align-items: center;
+        }
+
+        @media (min-width: 768px) {
+            .main-content {
+                flex-direction: row;
+                align-items: flex-start;
+            }
+            .map-section, .details-section {
+                flex-grow: 1;
+                flex-basis: 0;
+            }
+            .details-section {
+                padding-left: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <div class="map-container">
+        <h1 class="title text-center mb-0">TTC AFRICA INFOBASE🌶️</h1>
+        <p class="text-xs text-gray-500 -mt-2">Prototype by Gemini (with 5-minute-Vibe-Coding :)</p>
+        <div class="main-content">
+            <div class="map-section">
+                <svg id="map-svg" width="100%" height="100%" viewBox="0 0 800 600"></svg>
+            </div>
+            <div class="details-section">
+                <div id="details-container">
+                    国にマウスを重ねると詳細が表示されます
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tooltip" class="tooltip"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const svg = d3.select("#map-svg");
+            const width = 800;
+            const height = 600;
+            const detailsContainer = document.getElementById('details-container');
+            const tooltip = d3.select("#tooltip");
+
+            const projection = d3.geoMercator()
+                .center([20, 0])
+                .scale(600)
+                .translate([width / 2, height / 2]);
+
+            const path = d3.geoPath().projection(projection);
+
+            // 国の詳細情報（架空のデータ）
+            const countryDetails = {
+                "Algeria": { capital: "アルジェ", population: "約4,400万人", companies: "Sonatrach", hasToyotaTsusho: "あり", famousPerson: "ジネディーヌ・ジダン (サッカー選手)", famousFood: "クスクス", resident: "佐藤 太郎" },
+                "Angola": { capital: "ルアンダ", population: "約3,400万人", companies: "Sonangol", hasToyotaTsusho: "あり", famousPerson: "ジョゼ・エドゥアルド・ドス・サントス (政治家)", famousFood: "ムアンバ", resident: "鈴木 次郎" },
+                "Benin": { capital: "ポルトノボ", population: "約1,300万人", companies: "Benin-Togo Electric Community", hasToyotaTsusho: "あり", famousPerson: "アンジェリーク・キジョー (歌手)", famousFood: "アカリ", resident: "高橋 健太" },
+                "Botswana": { capital: "ハボローネ", population: "約260万人", companies: "Debswana", hasToyotaTsusho: "なし", famousPerson: "プシェツェ・ホリツァ (作家)", famousFood: "セセワ", resident: "田中 陽子" },
+                "Burkina Faso": { capital: "ワガドゥグー", population: "約2,100万人", companies: "Sodefitex", hasToyotaTsusho: "なし", famousPerson: "アリス・ドワ・エドナール (女優)", famousFood: "リズ・グラ", resident: "伊藤 慎" },
+                "Burundi": { capital: "ギテガ", population: "約1,200万人", companies: "Brarudi", hasToyotaTsusho: "なし", famousPerson: "ギディオン・ムブルリ (スポーツ選手)", famousFood: "マテベ", resident: "渡辺 恵" },
+                "Cameroon": { capital: "ヤウンデ", population: "約2,600万人", companies: "SNH", hasToyotaTsusho: "なし", famousPerson: "サミュエル・エトオ (サッカー選手)", famousFood: "ンダラ", resident: "山本 翼" },
+                "Cabo Verde": { capital: "プライア", population: "約55万人", companies: "Cabo Verde Airlines", hasToyotaTsusho: "なし", famousPerson: "セザリア・エヴォラ (歌手)", famousFood: "カチュパ", resident: "中村 淳" },
+                "Central African Republic": { capital: "バンギ", population: "約500万人", companies: "Socitel", hasToyotaTsusho: "なし", famousPerson: "バルテルミー・ボガンダ (政治家)", famousFood: "マンジョク", resident: "小林 誠" },
+                "Chad": { capital: "ンジャメナ", population: "約1,700万人", companies: "SHT", hasToyotaTsusho: "なし", famousPerson: "ユリアーネ・キザム (ジャーナリスト)", famousFood: "ダルバ", resident: "加藤 浩" },
+                "Comoros": { capital: "モロニ", population: "約85万人", companies: "Comores Telecom", hasToyotaTsusho: "なし", famousPerson: "アリ・ソイリ (政治家)", famousFood: "ラオ", resident: "吉田 聡" },
+                "Congo, Dem. Rep.": { capital: "キンシャサ", population: "約9,500万人", companies: "Gecamines", hasToyotaTsusho: "あり", famousPerson: "ディディエ・ムベンガ (バスケットボール選手)", famousFood: "モアンベチキン", resident: "山田 昇" },
+                "Congo": { capital: "ブラザヴィル", population: "約560万人", companies: "SNPC", hasToyotaTsusho: "なし", famousPerson: "フレデリック・マサ (政治家)", famousFood: "ブブチー", resident: "佐々木 司" },
+                "Cote d'Ivoire": { capital: "ヤムスクロ", population: "約2,800万人", companies: "CIE", hasToyotaTsusho: "あり", famousPerson: "ディディエ・ドログバ (サッカー選手)", famousFood: "アチェケ", resident: "井上 陽介" },
+                "Djibouti": { capital: "ジブチ市", population: "約110万人", companies: "Djibouti Telecom", hasToyotaTsusho: "なし", famousPerson: "ハサン・グーレド・アプティドン (政治家)", famousFood: "スキトマ", resident: "木村 宏" },
+                "Egypt": { capital: "カイロ", population: "約1億900万人", companies: "Orascom, Elsewedy Electric", hasToyotaTsusho: "あり", famousPerson: "モハメド・サラー (サッカー選手)", famousFood: "コシャリ", resident: "林 智子" },
+                "Equatorial Guinea": { capital: "マラボ", population: "約150万人", companies: "GE Petrol", hasToyotaTsusho: "なし", famousPerson: "テオドロ・オビアン・ンゲマ・ムバソゴ (政治家)", famousFood: "アボボ", resident: "斎藤 拓也" },
+                "Eritrea": { capital: "アスマラ", population: "約360万人", companies: "Nara", hasToyotaTsusho: "なし", famousPerson: "ファテマ・イブラヒム (活動家)", famousFood: "ゼグニ", resident: "清水 雅人" },
+                "Eswatini": { capital: "ムババーネ", population: "約120万人", companies: "Eswatini Sugar Association", hasToyotaTsusho: "なし", famousPerson: "ムスワティ3世 (国王)", famousFood: "インシワ", resident: "森田 雄大" },
+                "Ethiopia": { capital: "アディスアベバ", population: "約1億2,000万人", companies: "Ethiopian Airlines", hasToyotaTsusho: "あり", famousPerson: "ハイレ・ゲブレセラシエ (マラソン選手)", famousFood: "インジェラ", resident: "山口 裕子" },
+                "Gabon": { capital: "リーブルヴィル", population: "約240万人", companies: "Gabon Telecom", hasToyotaTsusho: "なし", famousPerson: "ピエール・エメリク・オーバメヤン (サッカー選手)", famousFood: "ガボン風チキン", resident: "松本 隆" },
+                "Gambia": { capital: "バンジュール", population: "約250万人", companies: "GAMTEL", hasToyotaTsusho: "なし", famousPerson: "アハマド・ドゥンビア (俳優)", famousFood: "ベナチン", resident: "池田 仁" },
+                "Ghana": { capital: "アクラ", population: "約3,300万人", companies: "Ghana Cocoa Board", hasToyotaTsusho: "あり", famousPerson: "コフィー・アナン (元国連事務総長)", famousFood: "フフ", resident: "橋本 浩" },
+                "Guinea": { capital: "コナクリ", population: "約1,400万人", companies: "CBG", hasToyotaTsusho: "なし", famousPerson: "マンドゥ・ケリー (歌手)", famousFood: "タンドリ", resident: "藤田 敬" },
+                "Guinea-Bissau": { capital: "ビサウ", population: "約200万人", companies: "Guiné-Telecom", hasToyotaTsusho: "なし", famousPerson: "アマドゥ・ディアロ (バスケットボール選手)", famousFood: "ジョロフ米", resident: "福田 美樹" },
+                "Kenya": { capital: "ナイロビ", population: "約5,500万人", companies: "Safaricom", hasToyotaTsusho: "あり", famousPerson: "エリウド・キプチョゲ (マラソン選手)", famousFood: "ウガリ", resident: "上田 聡" },
+                "Lesotho": { capital: "マセル", population: "約230万人", companies: "Letšeng Diamonds", hasToyotaTsusho: "なし", famousPerson: "モーシュエシュエ1世 (国王)", famousFood: "リホボ", resident: "大野 智" },
+                "Liberia": { capital: "モンロビア", population: "約500万人", companies: "Firestone Natural Rubber", hasToyotaTsusho: "なし", famousPerson: "ジョージ・ウェア (サッカー選手、政治家)", famousFood: "キャッサバの葉", resident: "小川 健二" },
+                "Libya": { capital: "トリポリ", population: "約690万人", companies: "National Oil Corporation", hasToyotaTsusho: "なし", famousPerson: "オマル・ムフタール (独立運動家)", famousFood: "バジン", resident: "石田 亮" },
+                "Madagascar": { capital: "アンタナナリボ", population: "約2,900万人", companies: "Jirama", hasToyotaTsusho: "なし", famousPerson: "ゾボ・ラザフィンドラザナ (歌手)", famousFood: "ラヴィトト", resident: "原田 隆" },
+                "Malawi": { capital: "リロングウェ", population: "約2,000万人", companies: "Airtel Malawi", hasToyotaTsusho: "なし", famousPerson: "ポール・カガメ (政治家)", famousFood: "ンシマ", resident: "中島 直樹" },
+                "Mali": { capital: "バマコ", population: "約2,200万人", companies: "Orange Mali", hasToyotaTsusho: "なし", famousPerson: "サリフ・ケイタ (歌手)", famousFood: "マフェ", resident: "後藤 悟" },
+                "Mauritania": { capital: "ヌアクショット", population: "約470万人", companies: "SNIM", hasToyotaTsusho: "なし", famousPerson: "モハメド・ウル・アブデル・アジズ (政治家)", famousFood: "メイフェ", resident: "宮本 隼人" },
+                "Morocco": { capital: "ラバト", population: "約3,700万人", companies: "OCP Group", hasToyotaTsusho: "あり", famousPerson: "ハキーム・ジイェフ (サッカー選手)", famousFood: "タジン", resident: "西村 誠" },
+                "Mozambique": { capital: "マプト", population: "約3,200万人", companies: "Vale", hasToyotaTsusho: "あり", famousPerson: "エウゼビオ (サッカー選手)", famousFood: "マタタ", resident: "村上 秀樹" },
+                "Namibia": { capital: "ウィントフック", population: "約250万人", companies: "Namibian Ports Authority", hasToyotaTsusho: "なし", famousPerson: "フランキー・フレデリクス (陸上選手)", famousFood: "オスーマラ", resident: "岡田 敦" },
+                "Niger": { capital: "ニアメ", population: "約2,500万人", companies: "SOMAIR", hasToyotaTsusho: "なし", famousPerson: "ママドゥ・タンジャ (政治家)", famousFood: "マサ", resident: "野村 哲也" },
+                "Nigeria": { capital: "アブジャ", population: "約2億1,800万人", companies: "Dangote Group", hasToyotaTsusho: "あり", famousPerson: "チママンダ・ンゴズィ・アディーチェ (作家)", famousFood: "ジョロフ米", resident: "松田 悠" },
+                "Rwanda": { capital: "キガリ", population: "約1,300万人", companies: "RwandaAir", hasToyotaTsusho: "なし", famousPerson: "ポール・カガメ (政治家)", famousFood: "イギトーリー", resident: "久保田 健" },
+                "Sao Tome and Principe": { capital: "サントメ", population: "約22万人", companies: "ECOM", hasToyotaTsusho: "なし", famousPerson: "マヌエル・ピント・ダ・コスタ (政治家)", famousFood: "フィジョア", resident: "岩田 隆" },
+                "Senegal": { capital: "ダカール", population: "約1,700万人", companies: "Sonatel", hasToyotaTsusho: "あり", famousPerson: "サディオ・マネ (サッカー選手)", famousFood: "チェブジェン", resident: "小野 孝" },
+                "Seychelles": { capital: "ヴィクトリア", population: "約9万9千人", companies: "Air Seychelles", hasToyotaTsusho: "なし", famousPerson: "ジェームス・ミッシェル (政治家)", famousFood: "カリーココ", resident: "吉田 聡" },
+                "Sierra Leone": { capital: "フリータウン", population: "約860万人", companies: "Sierra Rutile", hasToyotaTsusho: "なし", famousPerson: "イブラヒム・バ・カマラ (歌手)", famousFood: "カサワリーフ", resident: "石井 宏" },
+                "Somalia": { capital: "モガディシュ", population: "約1,600万人", companies: "Hormuud Telecom", hasToyotaTsusho: "なし", famousPerson: "ハナン・アブディ・アル=ガリム (詩人)", famousFood: "カシャト", resident: "中野 大輔" },
+                "South Africa": { capital: "プレトリア、ケープタウン、ブルームフォンテーン", population: "約6,000万人", companies: "Naspers, MTN Group", hasToyotaTsusho: "あり", famousPerson: "ネルソン・マンデラ (政治家)", famousFood: "ブラーイ", resident: "川口 陽一" },
+                "South Sudan": { capital: "ジュバ", population: "約1,100万人", companies: "Nile Commercial Bank", hasToyotaTsusho: "なし", famousPerson: "サミュエル・ロモ (音楽家)", famousFood: "アスィーダ", resident: "田中 義雄" },
+                "Sudan": { capital: "ハルツーム", population: "約4,600万人", companies: "Sudapet", hasToyotaTsusho: "なし", famousPerson: "サルマ・ハヤク (女優)", famousFood: "フル", resident: "池田 仁志" },
+                "Tanzania": { capital: "ドドマ", population: "約6,400万人", companies: "Tanzania Breweries", hasToyotaTsusho: "あり", famousPerson: "マグフリ (政治家)", famousFood: "ウガリ", resident: "中村 淳" },
+                "Togo": { capital: "ロメ", population: "約860万人", companies: "Togocel", hasToyotaTsusho: "なし", famousPerson: "エマニュエル・アデバヨール (サッカー選手)", famousFood: "フフ", resident: "小林 誠" },
+                "Tunisia": { capital: "チュニス", population: "約1,200万人", companies: "Tunisair", hasToyotaTsusho: "あり", famousPerson: "ハビーブ・ブルギーバ (政治家)", famousFood: "ブリク", resident: "加藤 浩" },
+                "Uganda": { capital: "カンパラ", population: "約4,600万人", companies: "Uganda Clays", hasToyotaTsusho: "あり", famousPerson: "イディ・アミン (元大統領)", famousFood: "マタトケ", resident: "松本 隆" },
+                "Zambia": { capital: "ルサカ", population: "約1,900万人", companies: "ZCCM", hasToyotaTsusho: "あり", famousPerson: "ムワナウェサ (政治家)", famousFood: "シマ", resident: "井上 陽介" },
+                "Zimbabwe": { capital: "ハラレ", population: "約1,600万人", companies: "Econet Wireless", hasToyotaTsusho: "なし", famousPerson: "ダニエル・キワンド (俳優)", famousFood: "サザ", resident: "木村 宏" }
+            };
+
+            // 地図データと詳細情報を対応させるためのマッピング
+            const nameMap = {
+                // 地図データでの国名: 詳細情報での国名
+                "Dem. Rep. Congo": "Congo, Dem. Rep.",
+                "Congo, Rep.": "Congo",
+                "Central African Rep.": "Central African Republic",
+                "S. Sudan": "South Sudan"
+            };
+
+            // 人口データの解析
+            const populations = Object.values(countryDetails).map(d => parseInt(d.population.replace(/[^0-9]/g, '')));
+            const minPop = d3.min(populations);
+            const maxPop = d3.max(populations);
+
+            // 人口に基づいたカラースケールを設定
+            const colorScale = d3.scaleSequential([minPop, maxPop], d3.interpolateBlues);
+
+            d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json").then(data => {
+                const countries = topojson.feature(data, data.objects.countries);
+
+                const africa = countries.features.filter(d => {
+                    const countryName = d.properties.name;
+                    const mappedName = nameMap[countryName] || countryName;
+                    return countryDetails.hasOwnProperty(mappedName);
+                });
+
+                svg.selectAll("path")
+                    .data(africa)
+                    .enter().append("path")
+                    .attr("d", path)
+                    .attr("class", "country")
+                    .attr("fill", d => {
+                        const countryName = d.properties.name;
+                        const detailsKey = nameMap[countryName] || countryName;
+                        const details = countryDetails[detailsKey];
+                        const population = parseInt(details.population.replace(/[^0-9]/g, ''));
+                        return colorScale(population);
+                    })
+                    .on("mouseover", function(event, d) {
+                        const countryName = d.properties.name;
+                        const detailsKey = nameMap[countryName] || countryName;
+                        const details = countryDetails[detailsKey];
+
+                        if (details) {
+                            detailsContainer.innerHTML = `
+                                <div class="details-content">
+                                    <div class="details-title">${d.properties.name}</div>
+                                    <p><strong>首都:</strong> ${details.capital}</p>
+                                    <p><strong>人口:</strong> ${details.population}</p>
+                                    <p><strong>主な企業:</strong> ${details.companies || "情報なし"}</p>
+                                    <p><strong>豊田通商拠点の有無:</strong> ${details.hasToyotaTsusho}</p>
+                                    <p><strong>有名人:</strong> ${details.famousPerson || "情報なし"}</p>
+                                    <p><strong>有名な食べ物:</strong> ${details.famousFood || "情報なし"}</p>
+                                    <p><strong>駐在員名:</strong> ${details.resident || "情報なし"}</p>
+                                </div>
+                            `;
+                        } else {
+                            detailsContainer.innerHTML = "国にマウスを重ねると詳細が表示されます";
+                        }
+                    })
+                    .on("mouseout", function(event, d) {
+                        detailsContainer.innerHTML = "国にマウスを重ねると詳細が表示されます";
+                    });
+
+                svg.on("mouseout", () => {
+                    tooltip.style("opacity", 0);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
